@@ -22,6 +22,13 @@ First release, accompanying the bachelor thesis *Вишеслојни граф �
 - Default weights (hierarchy 0.3, history 0.7) chosen by leave-one-project-out
   selection on ten Python projects; static weights when there is no history.
 
+### Evaluation
+- `association`: ROSE and TARMAQ rule mining as baselines for queries of
+  one or more known files (TARMAQ checked against the worked example of
+  Rolfsnes et al., SANER 2016).
+- `SetEvaluator` ranks a set of seed files with the same restart
+  distribution as the tool.
+
 ### Interfaces
 - CLI: `build`, `related`, `explain`, `hidden`, `report`, `obsidian`, `serve`.
 - MCP server (stdio) with eight tools; read-only tools are annotated. A wrong
@@ -32,5 +39,5 @@ First release, accompanying the bachelor thesis *Вишеслојни граф �
   and Cursor without overwriting existing configuration.
 
 ### Quality
-- 83 tests (94 % line coverage), ruff, strict mypy, CI on Python 3.12 and 3.13.
+- 92 tests (94 % line coverage), ruff, strict mypy, CI on Python 3.12 and 3.13.
 - Cache invalidated by revision and by a fingerprint of the working tree.

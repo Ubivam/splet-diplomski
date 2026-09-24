@@ -62,7 +62,7 @@ any scanned file changes (size or modification time).
 
 ```sh
 uv sync
-uv run pytest --cov=splet        # 83 tests
+uv run pytest --cov=splet        # 92 tests
 uv run ruff check src tests      # lint
 uv run ruff format --check src tests
 uv run mypy                      # strict type checking

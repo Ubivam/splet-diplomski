@@ -5,16 +5,21 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from splet.association import TransactionIndex
 from splet.build import build_graph
 from splet.evaluation import (
     Evaluator,
     Query,
+    SetEvaluator,
+    SetQuery,
     bootstrap_ci,
     make_queries,
+    make_set_queries,
     revision_at,
     simplex_grid,
     tune_weights,
 )
+from splet.fusion import LayerMatrices, Ranker, personalized_pagerank
 from splet.history import NormalizedCommit
 
 CORE, UTIL, INIT, TEST = (
@@ -86,3 +91,46 @@ def test_tune_weights_returns_the_best_grid_point(evaluator):
     grid = [{"evolution": 1.0}, {"docs": 1.0}]
     best, results = tune_weights(evaluator, grid)
     assert best == max(results, key=lambda r: r[1])[0]
+
+
+def test_set_queries_split_each_commit_once_per_size():
+    c = NormalizedCommit("ab12cd34ef56", 0, frozenset({"a", "b", "c", "d"}))
+    queries = make_set_queries([c], {"a", "b", "c", "d"}, sizes=(1, 2, 3, 4))
+    assert [len(q.seeds) for q in queries] == [1, 2, 3]  # the answer is never empty
+    assert all(q.seeds | q.truth == c.files and not q.seeds & q.truth for q in queries)
+    assert make_set_queries([c], set(c.files), sizes=(1, 2, 3)) == queries[:3]
+
+
+def test_set_evaluator_ranks_like_the_tool(repo):
+    graph = build_graph(repo.root)
+    scope = {f for f in graph.files() if f.endswith(".py")}
+    weights = {"evolution": 0.7, "hierarchy": 0.3}
+    ev = SetEvaluator(graph, [SetQuery(frozenset({CORE, UTIL}), frozenset({TEST}))], scope)
+    tool = Ranker(graph, weights).scores([[CORE, UTIL]])[:, 0]
+    ours = personalized_pagerank(ev.m.transition(weights), ev.restart, 0.85)[:, 0]
+    assert np.allclose(tool, ours)
+
+
+def test_pagerank_is_linear_in_the_restart_without_dangling_nodes(repo):
+    """With a positive hierarchy weight every node has an edge (proposition in
+    chapter 4), so the ranking for a set of files is the mean of single-file ones."""
+    graph = build_graph(repo.root)
+    m = LayerMatrices.from_graph(graph)
+    p = m.transition({"evolution": 0.7, "hierarchy": 0.3})
+    assert np.allclose(np.asarray(p.sum(axis=1)).ravel(), 1.0)
+    single = np.zeros((len(m.ids), 2))
+    single[m.index[CORE], 0] = single[m.index[UTIL], 1] = 1.0
+    joint = personalized_pagerank(p, single.mean(axis=1, keepdims=True), 0.85)[:, 0]
+    mean = personalized_pagerank(p, single, 0.85).mean(axis=1)
+    assert np.allclose(joint, mean, atol=1e-7)
+
+
+def test_set_evaluator_scores_graph_and_rules(repo):
+    graph = build_graph(repo.root)
+    scope = {f for f in graph.files() if f.endswith(".py")}
+    ev = SetEvaluator(graph, [SetQuery(frozenset({CORE, UTIL}), frozenset({TEST}))], scope)
+    history = [NormalizedCommit("x", 0, frozenset({CORE, UTIL, TEST}))]
+    index = TransactionIndex(history, set(graph.files()))
+    assert ev.rules(index, "rose").rr.tolist() == [1.0]
+    assert ev.rules(index, "tarmaq").rr.tolist() == [1.0]
+    assert 0 < ev.pagerank({"evolution": 1.0}).rr[0] <= 1

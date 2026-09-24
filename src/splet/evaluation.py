@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import scipy.sparse as sp
 
+from .association import RuleScore, TransactionIndex
 from .fusion import LayerMatrices, personalized_pagerank
 from .history import NormalizedCommit, run_git
 from .model import EVOLUTION, LAYERS, SpletGraph
@@ -136,6 +137,84 @@ class Evaluator:
             counts[self.m.index[a], self.m.index[b]] = n
             counts[self.m.index[b], self.m.index[a]] = n
         return self.evaluate(counts.tocsr() @ self.seed_matrix)
+
+
+# --- queries with several known files --------------------------------------------
+@dataclass(frozen=True)
+class SetQuery:
+    """The developer already knows ``seeds``; the rest of the commit is ``truth``."""
+
+    seeds: frozenset[str]
+    truth: frozenset[str]
+
+
+def make_set_queries(
+    commits: list[NormalizedCommit],
+    scope: set[str],
+    sizes: tuple[int, ...] = (1, 2, 3),
+    max_files: int = MAX_QUERY_COMMIT_FILES,
+) -> list[SetQuery]:
+    """One query per commit and query size, as in the TARMAQ evaluation: a random
+    subset of the commit's files is the query, the remaining files the answer.
+    The subset depends only on the commit hash, so every method sees the same."""
+    queries: list[SetQuery] = []
+    for c in commits:
+        files = sorted(c.files & scope)
+        if not 2 <= len(files) <= max_files:
+            continue
+        for m in sizes:
+            if m < len(files):
+                rng = np.random.default_rng([int(c.sha[:12], 16), m])
+                seeds = frozenset(rng.choice(files, size=m, replace=False).tolist())
+                queries.append(SetQuery(seeds, frozenset(files) - seeds))
+    return queries
+
+
+class SetEvaluator:
+    """Scores rankings for queries of one or more seed files."""
+
+    def __init__(self, graph: SpletGraph, queries: list[SetQuery], scope: set[str], seed: int = 0):
+        self.graph = graph
+        self.m = LayerMatrices.from_graph(graph)
+        self.queries = queries
+        self.candidates = np.array([n in scope for n in self.m.ids])
+        # one restart distribution per query, spread evenly over its seeds,
+        # exactly as the tool ranks a set of files (fusion.Ranker.scores)
+        self.restart = np.zeros((len(self.m.ids), len(queries)))
+        for j, q in enumerate(queries):
+            self.restart[[self.m.index[f] for f in q.seeds], j] = 1.0 / len(q.seeds)
+        self.tiebreak = np.random.default_rng(seed).random(len(self.m.ids)) * 1e-12
+
+    def _score(self, vectors: list[np.ndarray]) -> Scores:
+        rr = np.zeros(len(self.queries))
+        recall = {k: np.zeros(len(self.queries)) for k in KS}
+        for i, (q, v) in enumerate(zip(self.queries, vectors, strict=True)):
+            col = np.where(self.candidates, v + self.tiebreak, -np.inf)
+            col[[self.m.index[f] for f in q.seeds]] = -np.inf
+            truth = np.array([self.m.index[t] for t in q.truth])
+            # rank of a file = 1 + number of files with a strictly higher score
+            ranks = 1 + (col[None, :] > col[truth, None]).sum(axis=1)
+            rr[i] = 1.0 / ranks.min()
+            for k in KS:
+                recall[k][i] = (ranks <= k).sum() / len(ranks)
+        return Scores(rr, recall)
+
+    def pagerank(self, weights: dict[str, float], damping: float = 0.85) -> Scores:
+        """Personalized PageRank with the restart spread evenly over the seeds."""
+        scores = personalized_pagerank(self.m.transition(weights), self.restart, damping)
+        return self._score(list(scores.T))
+
+    def rules(self, index: TransactionIndex, method: str) -> Scores:
+        """``method`` is ``"rose"`` or ``"tarmaq"``."""
+        mine = index.rose if method == "rose" else index.tarmaq
+        return self._score([self._vector(mine(q.seeds)) for q in self.queries])
+
+    def _vector(self, scores: dict[str, RuleScore]) -> np.ndarray:
+        v = np.zeros(len(self.m.ids))
+        for f, s in scores.items():
+            if f in self.m.index:
+                v[self.m.index[f]] = s.value()
+        return v
 
 
 def simplex_grid(step: float = 0.1, layers: tuple[str, ...] = LAYERS) -> list[dict[str, float]]:
