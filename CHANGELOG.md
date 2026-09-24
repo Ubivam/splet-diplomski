@@ -24,11 +24,13 @@ First release, accompanying the bachelor thesis *Вишеслојни граф �
 
 ### Interfaces
 - CLI: `build`, `related`, `explain`, `hidden`, `report`, `obsidian`, `serve`.
-- MCP server (stdio) with eight tools; read-only tools are annotated.
+- MCP server (stdio) with eight tools; read-only tools are annotated. A wrong
+  request (unknown path, no connection, occupied directory) returns a tool
+  error with a readable message instead of a generic server failure.
 - Obsidian vault export with community colours and Serbian or English notes.
 - `scripts/povezi.sh` registers the server with Claude Code, Claude Desktop
   and Cursor without overwriting existing configuration.
 
 ### Quality
-- 82 tests (94 % line coverage), ruff, strict mypy, CI on Python 3.12 and 3.13.
+- 83 tests (94 % line coverage), ruff, strict mypy, CI on Python 3.12 and 3.13.
 - Cache invalidated by revision and by a fingerprint of the working tree.

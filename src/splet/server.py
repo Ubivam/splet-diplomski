@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 
 from .analysis import (
@@ -26,7 +27,7 @@ from .analysis import (
 from .build import is_current, load_or_build
 from .fusion import Ranker
 from .model import SpletGraph
-from .obsidian import export_vault
+from .obsidian import HEADINGS, export_vault
 from .report import render_report
 
 INSTRUCTIONS = """\
@@ -39,6 +40,11 @@ documentation). `hidden_dependencies` lists couplings that imports do not show.
 """
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+
+
+class RequestError(ToolError, ValueError):
+    """A request the tool cannot answer (unknown path, no connection, occupied
+    directory). Unlike an unexpected exception, its message reaches the client."""
 
 
 class GraphStore:
@@ -69,14 +75,14 @@ class GraphStore:
             try:
                 rel = p.resolve().relative_to(self.root).as_posix()
             except ValueError:
-                raise ValueError(f"{path!r} is outside the project {self.root}") from None
+                raise RequestError(f"{path!r} is outside the project {self.root}") from None
         else:
             rel = p.as_posix()
         rel = rel.removeprefix("./")
         if rel not in graph.nodes:
             close = difflib.get_close_matches(rel, graph.files(), n=3, cutoff=0.5)
             hint = f" Did you mean: {', '.join(close)}?" if close else ""
-            raise ValueError(f"{path!r} is not a file of the project.{hint}")
+            raise RequestError(f"{path!r} is not a file of the project.{hint}")
         return rel
 
 
@@ -115,7 +121,11 @@ def create_server(root: Path) -> MCPServer:
     @server.tool(name="connection_path", annotations=READ_ONLY)
     def connection_path_tool(source: str, target: str) -> list[dict[str, Any]]:
         """Strongest chain of links between two files and the layer of every hop."""
-        return connection_path(store.get(), store.normalize(source), store.normalize(target))
+        a, b = store.normalize(source), store.normalize(target)
+        try:
+            return connection_path(store.get(), a, b)
+        except ValueError as exc:
+            raise RequestError(str(exc)) from exc
 
     @server.tool(annotations=READ_ONLY)
     def project_report() -> str:
@@ -135,7 +145,12 @@ def create_server(root: Path) -> MCPServer:
     @server.tool()
     def export_obsidian(target_directory: str, language: str = "en") -> str:
         """Write the graph as an Obsidian vault (notes coloured by community)."""
-        out = export_vault(store.get(), Path(target_directory).expanduser(), language)
+        if language not in HEADINGS:
+            raise RequestError(f"language must be one of: {', '.join(HEADINGS)}")
+        try:
+            out = export_vault(store.get(), Path(target_directory).expanduser(), language)
+        except FileExistsError as exc:
+            raise RequestError(str(exc)) from exc
         return f"Vault written to {out}. Open it in Obsidian and use the graph view."
 
     return server

@@ -7,6 +7,7 @@ import json
 import re
 
 import pytest
+from mcp import Client
 
 from splet import __version__
 from splet.build import build_graph
@@ -102,6 +103,32 @@ def test_mcp_every_read_only_tool_answers(repo):
         ("project_report", {}),
     ]:
         call(server, name, **args)
+
+
+def test_mcp_client_receives_request_errors(repo, tmp_path):
+    """A wrong request comes back as a readable tool error, not a server crash."""
+    foreign = tmp_path / "notes"
+    foreign.mkdir()
+
+    async def errors() -> list[str]:
+        async with Client(create_server(repo.root)) as client:
+            texts = []
+            for name, args in [
+                ("related_files", {"paths": ["src/pkg/cor.py"]}),
+                ("connection_path", {"source": CORE, "target": "/etc/hosts"}),
+                ("export_obsidian", {"target_directory": str(foreign)}),
+                ("export_obsidian", {"target_directory": str(foreign), "language": "de"}),
+            ]:
+                result = await client.call_tool(name, args)
+                assert result.is_error
+                texts.append(result.content[0].text)
+            return texts
+
+    wrong_path, outside, occupied, language = asyncio.run(errors())
+    assert f"Did you mean: {CORE}" in wrong_path
+    assert "outside the project" in outside
+    assert "not a splet vault" in occupied
+    assert "language must be one of" in language
 
 
 def test_graph_store_normalises_paths(repo):
