@@ -13,7 +13,9 @@ directories), four edge layers:
 Files are ranked by personalized PageRank over a random walk that mixes the
 layers. Default layer weights (hierarchy 0.3, structure 0.0, evolution 0.7,
 docs 0.0) were chosen by leave-one-project-out selection on ten Python
-projects; see `../eksperiment` and chapter 6 of the thesis.
+projects, as part of the bachelor thesis *A Multilayer Knowledge Graph of a
+Software Project Based on Structural and Evolutionary Dependencies* (ETF,
+University of Belgrade, 2026).
 
 ## Use
 
@@ -69,8 +71,8 @@ uv run mypy                      # strict type checking
 uv run python scripts/proba_mcp.py ~/project   # real MCP client against the server
 ```
 
-Continuous integration runs the same checks on Python 3.12 and 3.13
-(`.github/workflows/ci.yml` in the repository root).
+Continuous integration (`.github/workflows/ci.yml`) runs the same checks on
+Python 3.12 and 3.13.
 
 ## License
 
