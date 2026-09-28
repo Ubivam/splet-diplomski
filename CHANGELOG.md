@@ -2,9 +2,8 @@
 
 ## 0.1.0 — 2026-09-24
 
-First release, accompanying the bachelor thesis *Вишеслојни граф знања
-софтверског пројекта заснован на структурним и еволуционим зависностима*
-(ETF, University of Belgrade).
+First release, accompanying the bachelor thesis *Вишеслојни граф знања заснован на зависностима*
+(A Multilayer Knowledge Graph Based on Dependencies; ETF, University of Belgrade).
 
 ### Graph
 - Four layers over the files of a project: directory hierarchy with

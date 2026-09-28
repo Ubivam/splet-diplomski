@@ -13,9 +13,8 @@ directories), four edge layers:
 Files are ranked by personalized PageRank over a random walk that mixes the
 layers. Default layer weights (hierarchy 0.3, structure 0.0, evolution 0.7,
 docs 0.0) were chosen by leave-one-project-out selection on ten Python
-projects, as part of the bachelor thesis *A Multilayer Knowledge Graph of a
-Software Project Based on Structural and Evolutionary Dependencies* (ETF,
-University of Belgrade, 2026).
+projects, as part of the bachelor thesis *A Multilayer Knowledge Graph Based
+on Dependencies* (ETF, University of Belgrade, 2026).
 
 ## Use
 
